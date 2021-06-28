@@ -169,6 +169,7 @@ initMap['docker'] = '''
 
     sudo sysctl net.ipv4.tcp_fin_timeout=15
     sudo sysctl net.ipv4.tcp_tw_reuse=1
+    sudo sysctl net.ipv4.ip_local_port_range=1024 65535
     sudo sysctl net.ipv6.conf.all.disable_ipv6=1
     sudo sysctl net.ipv6.conf.default.disable_ipv6=1
     sudo sysctl -w fs.inotify.max_user_watches=10000000 || true
