@@ -1,0 +1,35 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+ROOT_DIR=$(cd $(dirname $0)/../sources/proxysql_scheduler; pwd -P)
+SCRIPTS_DIR=$(cd $(dirname $0)/../local; pwd -P)
+SOURCE_IMAGE=${1:-centos:7}
+
+docker run --rm \
+    --security-opt seccomp=unconfined \
+    --mount type=bind,source=${ROOT_DIR},destination=/tmp/proxysql_scheduler \
+    --mount type=bind,source=${SCRIPTS_DIR},destination=/tmp/scripts \
+    public.ecr.aws/e7j3v3n0/pxc-build:${SOURCE_IMAGE//[:\/]/-} \
+    sh -c "
+    set -o errexit
+    set -o xtrace
+
+    export MTR_ARGS='${MTR_ARGS}'
+    export MTR_REPEAT='${MTR_REPEAT}'
+    export PXC_TARBALL='${PXC_TARBALL}'
+
+    mkdir /tmp/results
+    cp /tmp/proxysql_scheduler/results/*.tar.gz /tmp/results
+
+    bash -x /tmp/scripts/test-binary-proxysql-scheduler /tmp/results
+
+    mkdir /tmp/results/log
+    rsync -a --prune-empty-dirs --include '*/' --include '*.err' --exclude '*' /tmp/results/PXC/mysql-test/var /tmp/results/log
+    sudo tar -C /tmp/results/log -czf "proxysql-scheduler-test-mtr_logs.tar.gz" var
+
+    sudo mv ./proxysql-scheduler-test-mtr_logs.tar.gz /tmp/proxysql_scheduler/results/
+    sudo mv /tmp/results/*.xml /tmp/results/*.output  /tmp/proxysql_scheduler/results/
+    sudo chown $(id -u):$(id -g) /tmp/proxysql_scheduler/results/*.xml /tmp/proxysql_scheduler/results/*.output
+"

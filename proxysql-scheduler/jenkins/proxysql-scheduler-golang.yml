@@ -1,0 +1,36 @@
+- job:
+    name: proxysql-scheduler-go-pxc80-pipeline
+    project-type: pipeline
+    description: |
+        Do not edit this job through the web!
+    concurrent: true
+    parameters:
+    - string:
+        name: GIT_REPO
+        default: "https://github.com/Tusamarco/proxysql_scheduler"
+        description: URL to the scheduler repository
+    - string:
+        name: BRANCH
+        default: "main"
+        description: Tag/Branch for the scheduler repository
+    - string:
+        name: PXC_TARBALL
+        default: "https://downloads.percona.com/downloads/TESTING/pxc-8.0.22-13.1/Percona-XtraDB-Cluster_8.0.22-13.1_Linux.x86_64.glibc2.17.tar.gz"
+        description: PXC tarball including mtr to be used for testing
+    - string:
+        name: MTR_ARGS
+        default: "--suite=proxysql"
+        description: "mysql-test-run.pl options, for options like: --big-test --only-big-test --nounit-tests --unit-tests-report"
+    - string:
+        name: MTR_REPEAT
+        default: "1"
+        description: Run each test N number of times, --repeat=N
+    pipeline-scm:
+      scm:
+        - git:
+            url: https://github.com/kamil-holubicki/jenkins-pipelines.git
+            branches:
+            - 'proxysql-scheduler-1'
+            wipe-workspace: false
+      lightweight-checkout: true
+      script-path: proxysql-scheduler/jenkins/proxysql-scheduler-go-pxc80-pipeline.groovy

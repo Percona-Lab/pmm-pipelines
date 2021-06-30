@@ -1,0 +1,146 @@
+#!/bin/bash
+#
+# Execute this tool to test binary releases
+#
+#  possible jenkins vars:
+#      MTR_ARGS
+#      MTR_REPEAT
+#      PXC_TARBALL
+
+set -o errexit
+set -o xtrace
+
+function process_mtr_output {
+# parameters are:
+  local TESTSUITE=${1}
+  local INFILE=${2}
+  local OUTFILE=${3}
+  egrep -a -o '[[:alpha:]]+(_[[:alnum:]]+)?(\.\/)?.*\[ .* \].*$' ${INFILE} | sort | \
+  gawk 'BEGIN { print "<testsuite name=\"@@TESTSUITE@@\" tests=\"@@PASSED@@\" failures=\"@@FAILURES@@\" disabled=\"@@DISABLED@@\" skipped=\"@@SKIPPED@@\">" }
+  /\[.*pass \]/ { printf "\t<testcase name=\"%s\" time=\"%.3f\"></testcase>\n", $1, $NF/1000.0 }
+  /\[ disabled \]/ { printf "\t<testcase name=\"%s\"><skipped/></testcase>\n", $1 }
+  /\[ skipped \]/  { printf "\t<testcase name=\"%s\"><skipped/></testcase>\n", $1 }
+  /\[.*fail \]/    { printf "\t<testcase name=\"%s\"><failure/></testcase>\n", $1 }
+  END { print "</testsuite>" }' > ${OUTFILE}.tmp
+  gawk '!seen[$0]++' < ${OUTFILE}.tmp > ${OUTFILE}
+  rm -f ${OUTFILE}.tmp
+#
+  PASSED=$(grep -c 'time=' ${OUTFILE} ||:)
+  FAILURES=$(grep -c '<failure/>' ${OUTFILE} ||:)
+  DISABLED=$(grep -c '\[ disabled \]' ${INFILE} ||:)
+  SKIPPED=$(grep -c '\[ skipped \]' ${INFILE} ||:)
+#
+  sed -i.bak -e "s:@@TESTSUITE@@:${TESTSUITE}:g" ${OUTFILE}
+  sed -i.bak -e "s:@@PASSED@@:${PASSED}:g" ${OUTFILE}
+  sed -i.bak -e "s:@@FAILURES@@:${FAILURES}:g" ${OUTFILE}
+  sed -i.bak -e "s:@@DISABLED@@:${DISABLED}:g" ${OUTFILE}
+  sed -i.bak -e "s:@@SKIPPED@@:${SKIPPED}:g" ${OUTFILE}
+  sed -i.bak -e "s: \[::g" ${OUTFILE}
+}
+
+
+# Setup ProxySQL
+# Percona package
+sudo apt-get update
+sudo apt-get install -y wget gnupg2 lsb-release curl
+pushd /tmp
+    wget https://repo.percona.com/apt/percona-release_latest.generic_all.deb
+    sudo dpkg -i percona-release_latest.generic_all.deb
+popd
+sudo percona-release enable tools experimental
+sudo apt update
+
+sudo apt install -y proxysql21
+sudo /usr/bin/proxysql
+
+
+# ProxySQL upstream package
+#
+# sudo apt update
+# sudo apt install -y lsb-release
+# pushd /tmp
+#     sudo wget -O - 'https://repo.proxysql.com/ProxySQL/repo_pub_key' | sudo apt-key add -
+#     sudo echo deb https://repo.proxysql.com/ProxySQL/proxysql-2.1.x/$(lsb_release -sc)/ ./ \ | sudo tee /etc/apt/sources.list.d/proxysql.list
+# popd
+# sudo apt update
+# sudo apt install -y proxysql
+# sudo /usr/bin/proxysql
+
+
+# setup PXC
+WORKDIR_ABS=$(cd ${1:-./build/pxc}; pwd -P)
+rm -fr ${WORKDIR_ABS}/PXC
+mkdir -p ${WORKDIR_ABS}/PXC/sql
+
+# download PXC
+pushd /tmp
+    wget -q ${PXC_TARBALL} -O pxc.tar.gz
+    # for tests only
+    # cp ${WORKDIR_ABS}/$PXC_TARBALL ./
+    tar -C ${WORKDIR_ABS}/PXC --strip-components=1 -zxpf pxc.tar.gz
+popd
+
+export WSREP_PROVIDER=${WORKDIR_ABS}/PXC/lib/libgalera_smm.so
+cd ${WORKDIR_ABS}/PXC/mysql-test
+TESTCASE_TIMEOUT=30
+# Always serial execution. We use one instance of ProxySQL
+PARALLEL=1
+
+JEMALLOC=$(find /lib* /usr/lib* /usr/local/lib* -type f -name 'libjemalloc.so*' | head -n1)
+EATMYDATA=$(find /lib* /usr/lib* /usr/local/lib* -type f -name '*eatmyda*.so*' | head -n1)
+
+if [[ -z "${EATMYDATA}" ]]; then
+  echo "No libeatmydata.so lib found"
+  exit 1
+fi
+
+if [[ -z "${JEMALLOC}" ]]; then
+  echo "No jemalloc lib found"
+  exit 1
+fi
+
+if [[ -n "${MTR_REPEAT}" ]]; then
+  MTR_ARGS+=" --repeat=${MTR_REPEAT}"
+fi
+
+if [[ "${MTR_ARGS}" == *"--suite=max_parts"* ]]; then
+    TESTCASE_TIMEOUT=$((TESTCASE_TIMEOUT * 3))
+fi
+
+if [[ $MTR_ARGS == *"--big-test"* ]] || [[ $MTR_ARGS == *"--only-big-test"* ]]; then
+    TESTCASE_TIMEOUT=$((TESTCASE_TIMEOUT * 2))
+fi
+
+status=0
+
+#
+# setup proxysql-scheduler
+
+rm -fr ${WORKDIR_ABS}/PROXYSQL_SCHEDULER
+mkdir -p ${WORKDIR_ABS}/PROXYSQL_SCHEDULER
+
+tar -C ${WORKDIR_ABS}/PROXYSQL_SCHEDULER --strip-components=1 -zxpf ${WORKDIR_ABS}/proxysql-scheduler.tar.gz
+
+# link proxysql mtr suite into pxc mtr
+pushd ${WORKDIR_ABS}/PXC/mysql-test/suite
+    ln -s ${WORKDIR_ABS}/PROXYSQL_SCHEDULER/mtr/proxysql
+popd
+
+export PROXYSQL_SCHEDULER_SCRIPT=${WORKDIR_ABS}/PROXYSQL_SCHEDULER/proxysql-scheduler
+export PROXYSQL_SCHEDULER_CONFIG_DIR=${WORKDIR_ABS}/PROXYSQL_SCHEDULER/mtr/proxysql/config
+
+# Running MTR test cases
+MYSQLD_ENV="${ADD_TO_LD_PRELOAD:-}${JEMALLOC}:${EATMYDATA}"
+
+MTR_BUILD_THREAD=auto ./mysql-test-run.pl \
+    --parallel=${PARALLEL} \
+    --result-file \
+    ${MTR_ARGS} \
+    --force \
+    --max-test-fail=0 \
+    --suite-timeout=9999 \
+    --testcase-timeout=${TESTCASE_TIMEOUT} \
+    | tee ${WORKDIR_ABS}/mtr.output || status=$?
+process_mtr_output proxysql "${WORKDIR_ABS}/mtr.output" "${WORKDIR_ABS}/junit.xml"
+
+exit $status

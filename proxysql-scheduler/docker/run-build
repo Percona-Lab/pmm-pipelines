@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+ROOT_DIR=$(cd $(dirname $0)/../sources/proxysql_scheduler; pwd -P)
+SCRIPTS_DIR=$(cd $(dirname $0)/../local; pwd -P)
+SOURCE_IMAGE=${1:-ubuntu:focal}
+
+echo ROOT_DIR: $ROOT_DIR
+
+docker run --rm \
+    --cap-add SYS_PTRACE \
+    --mount type=bind,source=${ROOT_DIR},destination=/tmp/proxysql-scheduler \
+    --mount type=bind,source=${SCRIPTS_DIR},destination=/tmp/scripts \
+    public.ecr.aws/e7j3v3n0/pxc-build:${SOURCE_IMAGE//[:\/]/-} \
+    sh -c "
+    set -o errexit
+    set -o xtrace
+
+    sudo bash -x /tmp/scripts/build-binary-proxysql-scheduler /tmp/proxysql-scheduler /tmp/proxysql-scheduler
+
+    sudo rm -rf /tmp/proxysql-scheduler/results
+    sudo mkdir /tmp/proxysql-scheduler/results
+    sudo mv /tmp/proxysql-scheduler/*.tar.gz /tmp/proxysql-scheduler/results/
+    sudo chown -R $(id -u):$(id -g) /tmp/proxysql-scheduler/results
+"

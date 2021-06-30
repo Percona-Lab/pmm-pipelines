@@ -1,0 +1,53 @@
+#!/bin/bash
+
+set -o errexit
+set -o xtrace
+
+
+# ------------------------------------------------------------------------------
+# Declare all input variables
+# ------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------
+# set working dir
+# ------------------------------------------------------------------------------
+#mkdir -p ${1:-./build}
+WORKDIR=$(cd ${1:-./build}; pwd -P)
+INSTALL_DIR=${WORKDIR}/DESTDIR
+SOURCEDIR=$(cd ${2:-$(dirname $0)/../sources/proxysql-scheduler}; pwd -P)
+
+pushd /tmp
+    #sudo wget -q https://golang.org/dl/go1.15.8.linux-amd64.tar.gz
+    #sudo tar -C /usr/local -xzf go1.15.8.linux-amd64.tar.gz
+    #export PATH=$PATH:/usr/local/go/bin
+    #sudo /usr/local/go/bin/go version
+    #sudo rm go1.15.8.linux-amd64.tar.gz
+    apt update
+    apt install -y golang
+popd
+export GOPATH=${WORKDIR}
+echo "GOPATH: $GOPATH"
+pushd ${WORKDIR}
+    echo "Getting dependencies"
+    while read l; do
+        if [[ $l == github* || $l == golang* ]]; then
+            go get -v "$l"
+        fi
+    done < <(go list -f '{{ join .Imports "\n" }}')
+
+    # todo: fix these dependencies to be able to get them automatically
+    go get -v github.com/Tusamarco/toml
+    go get -v golang.org/x/text/language
+    go get -v golang.org/x/text/message
+    go get -v github.com/golang/mock/gomock
+    go get -v github.com/stretchr/testify/assert
+
+    go build
+
+    # run unit tests
+    go test -v dataobjects global
+
+    ls -la
+    tar --owner=0 --group=0 -czf proxysql-scheduler.tar.gz ./proxysql-scheduler ./mtr
+popd

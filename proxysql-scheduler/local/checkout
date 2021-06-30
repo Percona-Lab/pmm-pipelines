@@ -1,0 +1,42 @@
+#!/bin/bash
+
+#  possible vars:
+#      GIT_REPO
+#      BRANCH
+
+set -o errexit
+set -o xtrace
+
+
+ROOT_DIR=$(cd $(dirname $0)/..; pwd -P)/sources
+
+if [ ! -d "${ROOT_DIR}" ]; then
+    mkdir -p ${ROOT_DIR}
+fi
+
+# ==================== proxysql_scheduler ====================
+
+SCHEDULER_ROOT_DIR="${ROOT_DIR}/proxysql_scheduler"
+
+sudo rm -rf ${SCHEDULER_ROOT_DIR}
+
+git clone "${GIT_REPO:-https://github.com/Tusamarco/proxysql_scheduler}" "${SCHEDULER_ROOT_DIR}"
+
+pushd $SCHEDULER_ROOT_DIR
+    if [ -n "${GIT_REPO}" ]; then
+        git remote set-url origin "${GIT_REPO}"
+        git fetch --all
+    fi
+
+    git reset --hard
+    git clean -xdf
+
+    mkdir ./target
+
+    if [ -n "${BRANCH}" ]; then
+        git checkout "${BRANCH}"
+    fi
+    if [ -n "${GIT_REPO}" -a -n "${BRANCH}" ]; then
+        git pull origin ${BRANCH}
+    fi
+popd
