@@ -14,8 +14,8 @@ pipeline {
     }
     parameters {
         string(
-            defaultValue: 'perconalab/pmm-server:dev-latest',
-            description: 'PMM Server docker container version (image-name:version-tag ex. perconalab/pmm-server:dev-latest or perconalab/pmm-server:pmm1-dev-latest)',
+            defaultValue: 'public.ecr.aws/e7j3v3n0/pmm-server:dev-latest',
+            description: 'PMM Server docker container version (image-name:version-tag ex. public.ecr.aws/e7j3v3n0/pmm-server:dev-latest or perconalab/pmm-server:pmm1-dev-latest)',
             name: 'DOCKER_VERSION')
         string(
             defaultValue: 'dev-latest',
@@ -248,47 +248,51 @@ pipeline {
                         fi
                         """
                         node(env.VM_NAME){
-                            sh """
-                                set -o errexit
-                                set -o xtrace
-                                if [[ \$PMM_VERSION == pmm2 ]]; then
-                                    docker create \
-                                        -v /srv \
-                                        --name \${VM_NAME}-data \
-                                        ${DOCKER_VERSION} /bin/true
+                            installAWSv2()
+                            withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                                sh """
+                                    set -o errexit
+                                    set -o xtrace
+                                    if [[ \$PMM_VERSION == pmm2 ]]; then
+                                        aws ecr-public get-login-password --region us-east-1 | docker login -u AWS --password-stdin public.ecr.aws/e7j3v3n0
+                                        docker create \
+                                            -v /srv \
+                                            --name \${VM_NAME}-data \
+                                            ${DOCKER_VERSION} /bin/true
 
-                                    docker run -d \
-                                        -p 80:80 \
-                                        -p 443:443 \
-                                        -p 9000:9000 \
-                                        --volumes-from \${VM_NAME}-data \
-                                        --name \${VM_NAME}-server \
-                                        --restart always \
-                                        ${DOCKER_ENV_VARIABLE} \
-                                        ${DOCKER_VERSION}
-                                    sleep 10
-                                    docker logs \${VM_NAME}-server
-                                else
-                                    docker create \
-                                        -v /opt/prometheus/data \
-                                        -v /opt/consul-data \
-                                        -v /var/lib/mysql \
-                                        -v /var/lib/grafana \
-                                        --name \${VM_NAME}-data \
-                                        ${DOCKER_VERSION} /bin/true
+                                        docker run -d \
+                                            -p 80:80 \
+                                            -p 443:443 \
+                                            -p 9000:9000 \
+                                            --volumes-from \${VM_NAME}-data \
+                                            --name \${VM_NAME}-server \
+                                            --restart always \
+                                            ${DOCKER_ENV_VARIABLE} \
+                                            ${DOCKER_VERSION}
+                                        sleep 10
+                                        docker logs \${VM_NAME}-server
+                                    else
+                                        docker create \
+                                            -v /opt/prometheus/data \
+                                            -v /opt/consul-data \
+                                            -v /var/lib/mysql \
+                                            -v /var/lib/grafana \
+                                            --name \${VM_NAME}-data \
+                                            ${DOCKER_VERSION} /bin/true
 
-                                    docker run -d \
-                                        -p 80:80 \
-                                        -p 443:443 \
-                                        --volumes-from \${VM_NAME}-data \
-                                        --name \${VM_NAME}-server \
-                                        --restart always \
-                                        -e METRICS_RESOLUTION=5s \
-                                        ${DOCKER_VERSION}
-                                    sleep 10
-                                    docker logs \${VM_NAME}-server
-                                fi
-                            """
+                                        docker run -d \
+                                            -p 80:80 \
+                                            -p 443:443 \
+                                            --volumes-from \${VM_NAME}-data \
+                                            --name \${VM_NAME}-server \
+                                            --restart always \
+                                            -e METRICS_RESOLUTION=5s \
+                                            ${DOCKER_VERSION}
+                                        sleep 10
+                                        docker logs \${VM_NAME}-server
+                                    fi
+                                """
+                            }
                         }
                     }
                 }

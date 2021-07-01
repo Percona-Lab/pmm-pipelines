@@ -39,7 +39,7 @@ pipeline {
             description: 'Tag/Branch for pmm-qa repository',
             name: 'GIT_BRANCH')
         string(
-            defaultValue: 'perconalab/pmm-server:dev-latest',
+            defaultValue: 'public.ecr.aws/e7j3v3n0/pmm-server:dev-latest',
             description: 'PMM Server docker container version (image-name:version-tag)',
             name: 'DOCKER_VERSION')
         string(

@@ -17,7 +17,7 @@ pipeline {
             description: 'Commit hash for the branch',
             name: 'GIT_COMMIT_HASH')
         string(
-            defaultValue: 'perconalab/pmm-server:dev-latest',
+            defaultValue: 'public.ecr.aws/e7j3v3n0/pmm-server:dev-latest',
             description: 'PMM Server docker container version (image-name:version-tag)',
             name: 'DOCKER_VERSION')
         string(
@@ -76,37 +76,41 @@ pipeline {
                     sudo chmod +x /usr/bin/docker-compose
                     docker-compose --version
                 '''
+                installAWSv2()
             }
         }
         stage('API Tests Setup')
         {
             steps{
-                sh '''
-                    docker run -d \
-                    -e ENABLE_ALERTING=1 \
-                    -e PMM_DEBUG=1 \
-                    -e PERCONA_TEST_CHECKS_INTERVAL=10s \
-                    -e ENABLE_BACKUP_MANAGEMENT=1 \
-                    -e PERCONA_TEST_DBAAS=0 \
-                    -e PERCONA_TEST_SAAS_HOST=check-dev.percona.com:443 \
-                    -e PERCONA_TEST_CHECKS_PUBLIC_KEY=RWTg+ZmCCjt7O8eWeAmTLAqW+1ozUbpRSKSwNTmO+exlS5KEIPYWuYdX \
-                    -p 80:80 \
-                    -p 443:443 \
-                    -v \${PWD}/testdata/checks:/srv/checks \
-                    \${DOCKER_VERSION}
+                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    sh '''
+                        aws ecr-public get-login-password --region us-east-1 | docker login -u AWS --password-stdin public.ecr.aws/e7j3v3n0
+                        docker run -d \
+                        -e ENABLE_ALERTING=1 \
+                        -e PMM_DEBUG=1 \
+                        -e PERCONA_TEST_CHECKS_INTERVAL=10s \
+                        -e ENABLE_BACKUP_MANAGEMENT=1 \
+                        -e PERCONA_TEST_DBAAS=0 \
+                        -e PERCONA_TEST_SAAS_HOST=check-dev.percona.com:443 \
+                        -e PERCONA_TEST_CHECKS_PUBLIC_KEY=RWTg+ZmCCjt7O8eWeAmTLAqW+1ozUbpRSKSwNTmO+exlS5KEIPYWuYdX \
+                        -p 80:80 \
+                        -p 443:443 \
+                        -v \${PWD}/testdata/checks:/srv/checks \
+                        \${DOCKER_VERSION}
 
-                    docker build -t pmm-api-tests .
-                    git clone --single-branch --branch \${GIT_BRANCH_PMM_AGENT} https://github.com/percona/pmm-agent
-                    cd pmm-agent
-                    docker-compose up test_db
-                    MYSQL_IMAGE=\${MYSQL_IMAGE} docker-compose up -d mysql
-                    MONGO_IMAGE=\${MONGO_IMAGE} docker-compose up -d mongo
-                    MONGO_IMAGE=\${MONGO_IMAGE} docker-compose up -d mongo_with_ssl
-                    MONGO_IMAGE=\${MONGO_IMAGE} docker-compose up -d mongonoauth
-                    POSTGRES_IMAGE=\${POSTGRES_IMAGE} docker-compose up -d postgres
-                    docker-compose up -d sysbench
-                    cd ../
-                '''
+                        docker build -t pmm-api-tests .
+                        git clone --single-branch --branch \${GIT_BRANCH_PMM_AGENT} https://github.com/percona/pmm-agent
+                        cd pmm-agent
+                        docker-compose up test_db
+                        MYSQL_IMAGE=\${MYSQL_IMAGE} docker-compose up -d mysql
+                        MONGO_IMAGE=\${MONGO_IMAGE} docker-compose up -d mongo
+                        MONGO_IMAGE=\${MONGO_IMAGE} docker-compose up -d mongo_with_ssl
+                        MONGO_IMAGE=\${MONGO_IMAGE} docker-compose up -d mongonoauth
+                        POSTGRES_IMAGE=\${POSTGRES_IMAGE} docker-compose up -d postgres
+                        docker-compose up -d sysbench
+                        cd ../
+                    '''
+                }
                 script {
                     env.VM_IP = "127.0.0.1"
                     env.PMM_URL = "http://admin:admin@${env.VM_IP}"

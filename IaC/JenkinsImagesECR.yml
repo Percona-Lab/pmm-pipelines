@@ -44,6 +44,19 @@ Resources:
           - "x86"
           - "x86-64"
 
+  PMMServerRepo:
+    Type: AWS::ECR::PublicRepository
+    Properties:
+      RepositoryName: "pmm-server"
+      RepositoryCatalogData:
+        UsageText: "This image used exclusively for Percona Jenkins pipelines"
+        AboutText: "This image contains all build utilities to create proper builds and execute tests"
+        OperatingSystems:
+          - "Linux"
+        Architectures:
+          - "x86"
+          - "x86-64"
+
   ECRRWUser:
     Type: AWS::IAM::User
     Properties: 
@@ -55,8 +68,9 @@ Resources:
           - Effect: Allow
             Resource:
             - !GetAtt PSBuildRepo.Arn
-            - !GetAtt PXCBuildRepo.Arn    
-            - !GetAtt RPMBuildRepo.Arn        
+            - !GetAtt PXCBuildRepo.Arn
+            - !GetAtt RPMBuildRepo.Arn
+            - !GetAtt PMMServerRepo.Arn
             Action:
             - ecr-public:BatchCheckLayerAvailability
             - ecr-public:GetRepositoryPolicy

@@ -157,34 +157,31 @@ pipeline {
         }
         stage('Build server docker') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'hub.docker.com', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
-                    sh """
+                installAWSv2()
+                withCredentials([aws(accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'AMI/OVF', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    sh '''
                         sg docker -c "
-                            echo "${PASS}" | docker login -u "${USER}" --password-stdin
+                            set -o errexit
+                            aws ecr-public get-login-password --region us-east-1 | docker login -u AWS --password-stdin public.ecr.aws/e7j3v3n0
+
+                            export PUSH_DOCKER=1
+                            export DOCKER_TAG=public.ecr.aws/e7j3v3n0/pmm-server:$(date -u '+%Y%m%d%H%M')
+
+                            ./build/bin/build-server-docker
+
+                            if [ ! -z \${DOCKER_RC_TAG+x} ]; then
+                                docker tag  \\${DOCKER_TAG} public.ecr.aws/e7j3v3n0/pmm-server:${DOCKER_RC_TAG}
+                                docker push public.ecr.aws/e7j3v3n0/pmm-server:\${DOCKER_RC_TAG}
+                                docker rmi public.ecr.aws/e7j3v3n0/pmm-server:\${DOCKER_RC_TAG}
+                            fi
+                            docker tag  \\${DOCKER_TAG} public.ecr.aws/e7j3v3n0/pmm-server:${DOCKER_LATEST_TAG}
+                            docker push \\${DOCKER_TAG}
+                            docker push public.ecr.aws/e7j3v3n0/pmm-server:${DOCKER_LATEST_TAG}
+                            docker rmi  \\${DOCKER_TAG}
+                            docker rmi  public.ecr.aws/e7j3v3n0/pmm-server:${DOCKER_LATEST_TAG}
                         "
-                    """
+                    '''
                 }
-                sh '''
-                    sg docker -c "
-                        set -o errexit
-
-                        export PUSH_DOCKER=1
-                        export DOCKER_TAG=perconalab/pmm-server:$(date -u '+%Y%m%d%H%M')
-
-                        ./build/bin/build-server-docker
-
-                        if [ ! -z \${DOCKER_RC_TAG+x} ]; then
-                            docker tag  \\${DOCKER_TAG} perconalab/pmm-server:${DOCKER_RC_TAG}
-                            docker push perconalab/pmm-server:\${DOCKER_RC_TAG}
-                            docker rmi perconalab/pmm-server:\${DOCKER_RC_TAG}
-                        fi
-                        docker tag  \\${DOCKER_TAG} perconalab/pmm-server:${DOCKER_LATEST_TAG}
-                        docker push \\${DOCKER_TAG}
-                        docker push perconalab/pmm-server:${DOCKER_LATEST_TAG}
-                        docker rmi  \\${DOCKER_TAG}
-                        docker rmi  perconalab/pmm-server:${DOCKER_LATEST_TAG}
-                    "
-                '''
                 stash includes: 'results/docker/TAG', name: 'IMAGE'
                 archiveArtifacts 'results/docker/TAG'
             }
