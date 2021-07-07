@@ -105,7 +105,6 @@ pipeline {
                             build-server-rpm consul
                             build-server-rpm orchestrator
                             build-server-rpm rds_exporter
-                            build-server-rpm prometheus
                             build-server-rpm grafana
                         "
                     '''
