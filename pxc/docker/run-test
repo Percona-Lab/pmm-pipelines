@@ -26,6 +26,7 @@ docker run --rm \
     export GALERA_PARALLEL_RUN='${GALERA_PARALLEL_RUN}'
     export MTR_SUITES='${MTR_SUITES}'
     export PARALLEL_RUN='${PARALLEL_RUN}'
+    export DOCKER_OS='${DOCKER_OS//:/-}'
 
     mkdir /tmp/results
     cp /tmp/pxc/results/*.tar.gz /tmp/results
@@ -37,6 +38,6 @@ docker run --rm \
     sudo tar -C /tmp/results/log -czf "pxc80-test-mtr_logs.tar.gz" mtr_var
 
     sudo mv ./pxc80-test-mtr_logs.tar.gz /tmp/pxc/results/
-    sudo mv /tmp/results/*.xml /tmp/results/*.output  /tmp/pxc/results/
-    sudo chown $(id -u):$(id -g) /tmp/pxc/results/*.xml /tmp/pxc/results/*.output
+    sudo mv /tmp/results/*.xml /tmp/pxc/results/
+    sudo chown $(id -u):$(id -g) /tmp/pxc/results/*.xml
 "

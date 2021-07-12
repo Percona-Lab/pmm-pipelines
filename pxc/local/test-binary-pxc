@@ -11,6 +11,7 @@
 #      GALERA_PARALLEL_RUN
 #      MTR_SUITES
 #      PARALLEL_RUN
+#      DOCKER_OS
 
 set -o errexit
 set -o xtrace
@@ -79,22 +80,17 @@ if [[ "${DEFAULT_TESTING}" != "no" ]]; then
 
 	        MTR_BUILD_THREAD=auto ./mysql-test-run.pl \
 	           --result-file --suite=$suite \
-	           --force --xml-report=${WORKDIR_ABS}/${suite}_mtr.xml \
+	           --force \
 	           --max-test-fail=0 \
 	           --suite-timeout=9999 --parallel $WORKER \
 	           --port-group-size=20 --vardir=$PWD/var_${suite} \
 	           --testcase-timeout=${TESTCASE_TIMEOUT} \
                ${MTR_ARGS} \
-	           | tee ${WORKDIR_ABS}/${suite}_mtr.output || status=$?
+               --junit-output=${WORKDIR_ABS}/junit_${suite}.xml \
+               --junit-package="${DOCKER_OS}.${CMAKE_BUILD_TYPE}.${suite}" || true
+
             mv $PWD/var_${suite} $PWD/mtr_var
 	        killall -9 mysqld || true
-		    sed -i '1d' ${WORKDIR_ABS}/${suite}_mtr.xml
-		    sed -i '/<!\[CDATA/,/]]>/d' ${WORKDIR_ABS}/${suite}_mtr.xml
-		    sed -r 's/comment=.*.\/>/\/>/' ${WORKDIR_ABS}/${suite}_mtr.xml > ${WORKDIR_ABS}/${suite}_junit.tmp
-		    sed -r 's/status=\"skipped\".*.\/>/ > <skipped \/> <\/testcase>/' ${WORKDIR_ABS}/${suite}_junit.tmp >  ${WORKDIR_ABS}/${suite}_junit1.tmp
-		    sed -r 's/status=\"disabled\".*.\/>/ > <disabled \/> <\/testcase>/' ${WORKDIR_ABS}/${suite}_junit1.tmp >  ${WORKDIR_ABS}/${suite}_junit2.tmp
-            perl -p -0777 -e 's@<failure message=.*?">@<failure message="Test failed:...">@sg' ${WORKDIR_ABS}/${suite}_junit2.tmp > ${WORKDIR_ABS}/${suite}_junit.xml
-		    rm -f ${WORKDIR_ABS}/${suite}_junit*.tmp ${WORKDIR_ABS}/${suite}_mtr.xml
 		done
     else
         echo "Running full MTR"
@@ -108,16 +104,11 @@ if [[ "${DEFAULT_TESTING}" != "no" ]]; then
            --port-group-size=20 --vardir=var \
            --testcase-timeout=${TESTCASE_TIMEOUT} \
            ${MTR_ARGS} \
-           | tee ${WORKDIR_ABS}/mtr.output || status=$?
+           --junit-output=${WORKDIR_ABS}/junit.full_mtr.xml \
+           --junit-package="${DOCKER_OS}.${CMAKE_BUILD_TYPE}.full_mtr" || true
+
         mv $PWD/var $PWD/mtr_var
         killall -9 mysqld || true
-	    sed -i '1d' ${WORKDIR_ABS}/mtr.xml
-	    sed -i '/<!\[CDATA/,/]]>/d' ${WORKDIR_ABS}/mtr.xml
-	    sed -r 's/comment=.*.\/>/\/>/' ${WORKDIR_ABS}/mtr.xml > ${WORKDIR_ABS}/junit.tmp
-	    sed -r 's/status=\"skipped\".*.\/>/ > <skipped \/> <\/testcase>/' ${WORKDIR_ABS}/junit.tmp >  ${WORKDIR_ABS}/junit1.tmp
-	    sed -r 's/status=\"disabled\".*.\/>/ > <disabled \/> <\/testcase>/' ${WORKDIR_ABS}/junit1.tmp >  ${WORKDIR_ABS}/junit2.tmp
-        perl -p -0777 -e 's@<failure message=.*?">@<failure message="Test failed:...">@sg' ${WORKDIR_ABS}/junit2.tmp > ${WORKDIR_ABS}/junit.xml
-	    rm -f ${WORKDIR_ABS}/junit*.tmp ${WORKDIR_ABS}/mtr.xml
     fi
 fi
 
