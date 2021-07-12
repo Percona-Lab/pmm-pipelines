@@ -147,6 +147,10 @@ pipeline {
             defaultValue: 'latest',
             description: 'GKE version',
             name: 'GKE_VERSION')
+        string(
+            defaultValue: '',
+            description: 'Slack user to notify on failures',
+            name: 'OWNER_SLACK')
         choice(
             choices: 'NO\nYES',
             description: 'Run tests with cluster wide',
@@ -338,6 +342,11 @@ pipeline {
             """
             step([$class: 'JUnitResultArchiver', testResults: '*.xml', healthScaleFactor: 1.0])
             archiveArtifacts '*.xml'
+
+            if (currentBuild.result != null && currentBuild.result != 'SUCCESS') {
+                slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL}"
+                slackSend channel: '@${OWNER_SLACK}', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL}"
+            }
 
             withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-alpha-key-file', variable: 'CLIENT_SECRET_FILE')]) {
                 sh '''

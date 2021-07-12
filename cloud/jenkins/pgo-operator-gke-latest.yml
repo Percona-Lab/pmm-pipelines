@@ -34,4 +34,8 @@
         name: GKE_VERSION
         default: 'latest'
         description: GKE version
+    - string:
+        name: OWNER_SLACK
+        default:
+        description: Slack user to notify on failures
 

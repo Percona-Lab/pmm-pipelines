@@ -31,6 +31,10 @@
         default: main
         description: Tag/Branch for percona/percona-server-mongodb-operator repository
     - string:
+        name: OWNER_SLACK
+        default:
+        description: Slack user to notify on failures
+    - string:
         name: PSMDB_OPERATOR_IMAGE
         default:
         description: Operator image
