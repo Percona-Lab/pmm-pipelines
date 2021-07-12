@@ -143,6 +143,10 @@ pipeline {
             name: 'GKE_VERSION')
         string(
             defaultValue: '',
+            description: 'Slack user to notify on failures',
+            name: 'OWNER_SLACK')
+        string(
+            defaultValue: '',
             description: 'Operator image: perconalab/percona-server-mongodb-operator:main',
             name: 'PSMDB_OPERATOR_IMAGE')
         string(
@@ -292,6 +296,10 @@ pipeline {
     post {
         always {
             setTestsresults()
+            if (currentBuild.result != null && currentBuild.result != 'SUCCESS') {
+                slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL}"
+                slackSend channel: '@${OWNER_SLACK}', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL}"
+            }
             withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-alpha-key-file', variable: 'CLIENT_SECRET_FILE')]) {
                 sh '''
                     export CLUSTER_NAME=$(echo jenkins-latest-psmdb-$(git -C source rev-parse --short HEAD) | tr '[:upper:]' '[:lower:]')

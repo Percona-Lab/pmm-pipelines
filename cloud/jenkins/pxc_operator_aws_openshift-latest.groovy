@@ -137,6 +137,10 @@ pipeline {
             name: 'CLUSTER_WIDE')
         string(
             defaultValue: '',
+            description: 'Slack user to notify on failures',
+            name: 'OWNER_SLACK')
+        string(
+            defaultValue: '',
             description: 'Operator image: perconalab/percona-xtradb-cluster-operator:main',
             name: 'PXC_OPERATOR_IMAGE')
         string(
@@ -331,6 +335,10 @@ pipeline {
 
     post {
         always {
+                if (currentBuild.result != null && currentBuild.result != 'SUCCESS') {
+                    slackSend channel: '#cloud-dev-ci', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL}"
+                    slackSend channel: '@${OWNER_SLACK}', color: '#FF0000', message: "[${JOB_NAME}]: build ${currentBuild.result}, ${BUILD_URL}"
+                }
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'openshift-cicd'], file(credentialsId: 'aws-openshift-41-key-pub', variable: 'AWS_NODES_KEY_PUB'), file(credentialsId: 'openshift-secret-file', variable: 'OPENSHIFT-CONF-FILE')]) {
                      sshagent(['aws-openshift-41-key']) {
                          sh """
