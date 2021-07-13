@@ -1,0 +1,21 @@
+- job:
+    name: percona-software-repo-docs
+    project-type: pipeline
+    description: |
+        Do not edit this job through the web!
+    properties:
+    - build-discarder:
+        artifact-days-to-keep: -1
+        artifact-num-to-keep: 10
+        days-to-keep: -1
+        num-to-keep: 10
+    pipeline-scm:
+      scm:
+        - git:
+            url: https://github.com/Percona-Lab/jenkins-pipelines.git
+            branches:
+            - 'master'
+            wipe-workspace: false
+      lightweight-checkout: true
+      script-path: prel/prel-documentation.groovy
+
