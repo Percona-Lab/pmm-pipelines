@@ -23,18 +23,19 @@ netMap['eu-west-1b'] = 'subnet-06b7b6c7fd86a48e8'
 netMap['eu-west-1c'] = 'subnet-0de17643aea1f04a4'
 
 imageMap = [:]
-imageMap['eu-west-1a.docker'] = 'ami-063d4ab14480ac177'
-imageMap['eu-west-1a.docker-32gb'] = 'ami-063d4ab14480ac177'
-imageMap['eu-west-1a.docker2'] = 'ami-063d4ab14480ac177'
-imageMap['eu-west-1a.micro-amazon'] = 'ami-063d4ab14480ac177'
+imageMap['eu-west-1a.docker'] = 'ami-058b1b7fe545997ae'
+imageMap['eu-west-1a.docker-32gb'] = 'ami-058b1b7fe545997ae'
+imageMap['eu-west-1a.docker2'] = 'ami-058b1b7fe545997ae'
+imageMap['eu-west-1a.micro-amazon'] = 'ami-058b1b7fe545997ae'
 imageMap['eu-west-1a.fips-centos-7-x64'] = 'ami-0ff760d16d9497662'
 
 imageMap['eu-west-1a.min-centos-6-x64'] = 'ami-0451e9d3427711cb1'
 imageMap['eu-west-1a.min-centos-7-x64'] = 'ami-04f5641b0d178a27a'
-imageMap['eu-west-1a.min-buster-x64']   = 'ami-0874dad5025ca362c'
-imageMap['eu-west-1a.min-bionic-x64']   = 'ami-014b036b990648fb3'
-imageMap['eu-west-1a.min-stretch-x64']  = 'ami-07a2fd1dc58356f1e'
+imageMap['eu-west-1a.min-buster-x64']   = 'ami-04e1d2f88740af5e1'
+imageMap['eu-west-1a.min-bionic-x64']   = 'ami-0c259a97cbf621daf'
+imageMap['eu-west-1a.min-stretch-x64']  = 'ami-097672ef083ca4411'
 imageMap['eu-west-1a.min-xenial-x64']   = 'ami-038d7b856fe7557b3'
+imageMap['eu-west-1a.docker-32gb-hirsute'] = 'ami-03c54cffe1a147d6c'
 
 imageMap['eu-west-1b.docker'] = imageMap['eu-west-1a.docker']
 imageMap['eu-west-1b.docker-32gb'] = imageMap['eu-west-1a.docker-32gb']
@@ -48,6 +49,7 @@ imageMap['eu-west-1b.min-buster-x64']   = imageMap['eu-west-1a.min-buster-x64']
 imageMap['eu-west-1b.min-bionic-x64']   = imageMap['eu-west-1a.min-bionic-x64']
 imageMap['eu-west-1b.min-stretch-x64']  = imageMap['eu-west-1a.min-stretch-x64']
 imageMap['eu-west-1b.min-xenial-x64']   = imageMap['eu-west-1a.min-xenial-x64']
+imageMap['eu-west-1b.docker-32gb-hirsute'] = imageMap['eu-west-1a.docker-32gb-hirsute']
 
 imageMap['eu-west-1c.docker'] = imageMap['eu-west-1a.docker']
 imageMap['eu-west-1c.docker-32gb'] = imageMap['eu-west-1a.docker-32gb']
@@ -61,6 +63,7 @@ imageMap['eu-west-1c.min-buster-x64']   = imageMap['eu-west-1a.min-buster-x64']
 imageMap['eu-west-1c.min-bionic-x64']   = imageMap['eu-west-1a.min-bionic-x64']
 imageMap['eu-west-1c.min-stretch-x64']  = imageMap['eu-west-1a.min-stretch-x64']
 imageMap['eu-west-1c.min-xenial-x64']   = imageMap['eu-west-1a.min-xenial-x64']
+imageMap['eu-west-1c.docker-32gb-hirsute'] = imageMap['eu-west-1a.docker-32gb-hirsute']
 
 priceMap = [:]
 priceMap['t2.small'] = '0.01'
@@ -83,6 +86,7 @@ userMap['min-centos-7-x64']  = 'centos'
 userMap['fips-centos-7-x64'] = 'centos'
 userMap['min-stretch-x64']   = 'admin'
 userMap['min-buster-x64']    = 'admin'
+userMap['docker-32gb-hirsute'] = 'ubuntu'
 
 userMap['psmdb'] = userMap['min-xenial-x64']
 
@@ -120,7 +124,7 @@ initMap['docker'] = '''
             echo try again
         done
 
-        7za -o/tmp x /tmp/awscliv2.zip 
+        7za -aoa -o/tmp x /tmp/awscliv2.zip 
         cd /tmp/aws && sudo ./install
     fi
 
@@ -144,6 +148,73 @@ initMap['docker'] = '''
     echo '{"experimental": true}' | sudo tee /etc/docker/daemon.json
     sudo systemctl status docker || sudo systemctl start docker
     sudo service docker status || sudo service docker start
+    echo "* * * * * root /usr/sbin/route add default gw 10.177.1.1 eth0" | sudo tee /etc/cron.d/fix-default-route
+'''
+
+initMap['docker-32gb-hirsute'] = '''
+    set -o xtrace
+    if ! mountpoint -q /mnt; then
+        for DEVICE_NAME in $(lsblk -ndpbo NAME,SIZE | sort -n -r | awk '{print $1}'); do
+            if ! grep -qs "${DEVICE_NAME}" /proc/mounts; then
+                DEVICE="${DEVICE_NAME}"
+                break
+            fi
+        done
+        if [ -n "${DEVICE}" ]; then
+            sudo mkfs.ext2 ${DEVICE}
+            sudo mount ${DEVICE} /mnt
+        fi
+    fi
+    until sudo apt-get update; do
+        sleep 1
+        echo try again
+    done
+
+    until sudo apt-get -y install openjdk-8-jre-headless apt-transport-https ca-certificates curl gnupg lsb-release unzip; do
+        sleep 1
+        echo try again
+    done
+
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    until sudo apt-get update; do
+        sleep 1
+        echo try again
+    done
+    until sudo apt-get -y install docker-ce docker-ce-cli containerd.io; do
+        sleep 1
+        echo try again
+    done
+
+    if ! $(aws --version | grep -q 'aws-cli/2'); then
+        find /tmp -maxdepth 1 -name "*aws*" | xargs sudo rm -rf
+
+        until curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"; do
+            sleep 1
+            echo try again
+        done
+
+        unzip -o /tmp/awscliv2.zip -d /tmp
+        cd /tmp/aws && sudo ./install
+    fi
+
+    sudo install -o $(id -u -n) -g $(id -g -n) -d /mnt/jenkins
+
+    sudo sysctl net.ipv4.tcp_fin_timeout=15
+    sudo sysctl net.ipv4.tcp_tw_reuse=1
+    sudo sysctl net.ipv6.conf.all.disable_ipv6=1
+    sudo sysctl net.ipv6.conf.default.disable_ipv6=1
+    sudo sysctl -w fs.inotify.max_user_watches=10000000 || true
+    sudo sysctl -w fs.aio-max-nr=1048576 || true
+    sudo sysctl -w fs.file-max=6815744 || true
+    echo "*  soft  core  unlimited" | sudo tee -a /etc/security/limits.conf
+    sudo sed -i.bak -e 's^ExecStart=.*^ExecStart=/usr/bin/dockerd --data-root=/mnt/docker --default-ulimit nofile=900000:900000^' /usr/lib/systemd/system/docker.service
+    sudo systemctl daemon-reload
+    sudo install -o root -g root -d /mnt/docker
+    sudo usermod -aG docker $(id -u -n)
+    sudo mkdir -p /etc/docker
+    echo '{"experimental": true, "ipv6": true, "fixed-cidr-v6": "fd3c:a8b0:18eb:5c06::/64"}' | sudo tee /etc/docker/daemon.json
+    sudo systemctl restart docker
     echo "* * * * * root /usr/sbin/route add default gw 10.177.1.1 eth0" | sudo tee /etc/cron.d/fix-default-route
 '''
 
@@ -281,6 +352,7 @@ typeMap['min-centos-6-x32']  = 'm1.medium'
 typeMap['min-centos-6-x64']  = 'm4.xlarge'
 typeMap['min-stretch-x64']   = typeMap['min-centos-7-x64']
 typeMap['min-xenial-x64']    = typeMap['min-centos-7-x64']
+typeMap['docker-32gb-hirsute'] = 'm4.2xlarge'
 
 execMap = [:]
 execMap['docker']            = '1'
@@ -295,6 +367,7 @@ execMap['fips-centos-7-x64'] = '1'
 execMap['min-stretch-x64']   = '1'
 execMap['min-xenial-x64']    = '1'
 execMap['min-buster-x64']    = '1'
+execMap['docker-32gb-hirsute'] = '1'
 
 devMap = [:]
 devMap['docker']            = '/dev/xvda=:8:true:gp2,/dev/xvdd=:80:true:gp2'
@@ -310,6 +383,7 @@ devMap['min-stretch-x64']   = 'xvda=:8:true:gp2,xvdd=:80:true:gp2'
 devMap['min-xenial-x64']    = devMap['min-bionic-x64']
 devMap['min-centos-6-x32']  = '/dev/sda=:8:true:gp2,/dev/sdd=:80:true:gp2'
 devMap['min-buster-x64']    = '/dev/xvda=:8:true:gp2,/dev/xvdd=:80:true:gp2'
+devMap['docker-32gb-hirsute'] = devMap['docker']
 
 labelMap = [:]
 labelMap['docker']            = ''
@@ -324,6 +398,7 @@ labelMap['fips-centos-7-x64'] = ''
 labelMap['min-stretch-x64']   = ''
 labelMap['min-xenial-x64']    = ''
 labelMap['min-buster-x64']    = ''
+labelMap['docker-32gb-hirsute'] = ''
 
 // https://github.com/jenkinsci/ec2-plugin/blob/ec2-1.41/src/main/java/hudson/plugins/ec2/SlaveTemplate.java
 SlaveTemplate getTemplate(String OSType, String AZ) {
@@ -403,6 +478,7 @@ String region = 'eu-west-1'
             getTemplate('min-buster-x64',     "${region}${it}"),
             getTemplate('min-stretch-x64',    "${region}${it}"),
             getTemplate('min-xenial-x64',     "${region}${it}"),
+            getTemplate('docker-32gb-hirsute', "${region}${it}"),
         ],                                       // List<? extends SlaveTemplate> templates
         '',
         ''
